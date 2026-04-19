@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import type { PersonalityId, ResultPersonality } from "@/data";
 import { PERSONALITIES, RESULT_DISPLAY_COPY } from "@/data";
 
@@ -9,23 +9,6 @@ export type ResultViewProps = {
   resultPersonality: ResultPersonality;
   className?: string;
 };
-
-function downloadFromHref(url: string, filename: string) {
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-}
-
-function isLikelyMobile(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-    navigator.userAgent,
-  );
-}
 
 function copyToResult(id: PersonalityId): ResultPersonality {
   const c = RESULT_DISPLAY_COPY[id];
@@ -190,9 +173,35 @@ function ResultStyleCard({
   );
 }
 
+const SHARE_TOAST_MS = 2600;
+const SHARE_TOAST_TEXT = "🔗已复制，快去分享吧";
+
+async function copyPageUrlToClipboard(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const text = window.location.href;
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
 export function ResultView({ resultPersonality, className = "" }: ResultViewProps) {
-  const [exporting, setExporting] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [shareToast, setShareToast] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [catalogDetailId, setCatalogDetailId] = useState<PersonalityId | null>(null);
 
@@ -201,41 +210,17 @@ export function ResultView({ resultPersonality, className = "" }: ResultViewProp
     setCatalogDetailId(null);
   }, []);
 
-  const dismissPreview = useCallback(() => {
-    setPreviewUrl((prev) => {
-      if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
-      return null;
-    });
+  useEffect(() => {
+    if (!shareToast) return;
+    const t = window.setTimeout(() => setShareToast(false), SHARE_TOAST_MS);
+    return () => window.clearTimeout(t);
+  }, [shareToast]);
+
+  const handleInviteFriends = useCallback(async () => {
+    const ok = await copyPageUrlToClipboard();
+    if (ok) setShareToast(true);
+    else alert("复制失败，请手动复制地址栏链接。");
   }, []);
-
-  const handleExport = useCallback(async () => {
-    setExporting(true);
-    const filename = `FANTI-${resultPersonality.id}.png`;
-    try {
-      const compact = isLikelyMobile() ? "?compact=1" : "";
-      const res = await fetch(
-        `/api/report/${encodeURIComponent(resultPersonality.id)}${compact}`,
-      );
-      if (!res.ok) throw new Error(`report ${res.status}`);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-
-      if (isLikelyMobile()) {
-        setPreviewUrl((prev) => {
-          if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
-          return url;
-        });
-      } else {
-        downloadFromHref(url, filename);
-        URL.revokeObjectURL(url);
-      }
-    } catch (e) {
-      console.error(e);
-      alert("生成图片失败，请稍后重试。");
-    } finally {
-      setExporting(false);
-    }
-  }, [resultPersonality.id]);
 
   return (
     <div
@@ -248,11 +233,10 @@ export function ResultView({ resultPersonality, className = "" }: ResultViewProp
       <div className="mt-5 flex gap-4">
         <button
           type="button"
-          onClick={handleExport}
-          disabled={exporting}
-          className="flex-1 rounded-xl bg-gradient-to-r from-zinc-100 to-zinc-300 py-3.5 text-sm font-semibold text-zinc-950 shadow-[0_0_24px_-4px_rgba(250,250,250,0.35)] transition enabled:hover:brightness-105 enabled:active:scale-[0.99] disabled:opacity-60"
+          onClick={handleInviteFriends}
+          className="flex-1 rounded-xl bg-gradient-to-r from-zinc-100 to-zinc-300 py-3.5 text-sm font-semibold text-zinc-950 shadow-[0_0_24px_-4px_rgba(250,250,250,0.35)] transition hover:brightness-105 active:scale-[0.99]"
         >
-          {exporting ? "生成中…" : "生成专属报告"}
+          邀请朋友
         </button>
         <button
           type="button"
@@ -263,50 +247,12 @@ export function ResultView({ resultPersonality, className = "" }: ResultViewProp
         </button>
       </div>
 
-      {previewUrl ? (
+      {shareToast ? (
         <div
-          className="fixed inset-0 z-[120] flex flex-col items-center justify-center bg-black/88 p-4 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="fanti-preview-title"
+          className="pointer-events-none fixed bottom-24 left-1/2 z-[130] max-w-[min(90vw,20rem)] -translate-x-1/2 rounded-full border border-white/15 bg-zinc-900/95 px-4 py-2.5 text-center text-sm font-medium text-zinc-100 shadow-lg backdrop-blur-md"
+          role="status"
         >
-          <div className="mb-3 flex w-full max-w-sm items-center justify-between text-zinc-300">
-            <h2 id="fanti-preview-title" className="text-sm font-medium">
-              报告已生成
-            </h2>
-            <button
-              type="button"
-              onClick={dismissPreview}
-              className="rounded-lg px-3 py-1 text-xs text-zinc-400 hover:bg-white/10 hover:text-zinc-100"
-            >
-              关闭
-            </button>
-          </div>
-          <div className="max-h-[70vh] w-full max-w-sm overflow-auto rounded-xl border border-white/10 bg-zinc-900/50 p-2 shadow-2xl">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={previewUrl}
-              alt="FANTI 测试结果报告"
-              className="h-auto w-full rounded-lg"
-            />
-          </div>
-          <p className="mt-4 max-w-sm text-center text-xs leading-relaxed text-zinc-500">
-            手机版报告为<strong className="text-zinc-300">约 9:16 节选图</strong>
-            ，便于保存与分享；完整正文仍以本页为准。请
-            <strong className="text-zinc-300">长按图片保存到相册</strong>
-            。若系统无反应，可截屏本页后再裁剪。
-          </p>
-          {!isLikelyMobile() ? (
-            <button
-              type="button"
-              onClick={() =>
-                downloadFromHref(previewUrl, `FANTI-${resultPersonality.id}.png`)
-              }
-              className="mt-4 rounded-lg border border-white/15 px-4 py-2 text-xs font-medium text-zinc-200 hover:bg-white/5"
-            >
-              再次下载 PNG
-            </button>
-          ) : null}
+          {SHARE_TOAST_TEXT}
         </div>
       ) : null}
 

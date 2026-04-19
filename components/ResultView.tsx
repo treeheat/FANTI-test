@@ -212,8 +212,9 @@ export function ResultView({ resultPersonality, className = "" }: ResultViewProp
     setExporting(true);
     const filename = `FANTI-${resultPersonality.id}.png`;
     try {
+      const compact = isLikelyMobile() ? "?compact=1" : "";
       const res = await fetch(
-        `/api/report/${encodeURIComponent(resultPersonality.id)}`,
+        `/api/report/${encodeURIComponent(resultPersonality.id)}${compact}`,
       );
       if (!res.ok) throw new Error(`report ${res.status}`);
       const blob = await res.blob();
@@ -290,7 +291,9 @@ export function ResultView({ resultPersonality, className = "" }: ResultViewProp
             />
           </div>
           <p className="mt-4 max-w-sm text-center text-xs leading-relaxed text-zinc-500">
-            请<strong className="text-zinc-300">长按图片保存到相册</strong>
+            手机版报告为<strong className="text-zinc-300">约 9:16 节选图</strong>
+            ，便于保存与分享；完整正文仍以本页为准。请
+            <strong className="text-zinc-300">长按图片保存到相册</strong>
             。若系统无反应，可截屏本页后再裁剪。
           </p>
           {!isLikelyMobile() ? (

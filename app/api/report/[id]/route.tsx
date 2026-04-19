@@ -13,8 +13,17 @@ function isPersonalityId(id: string): id is PersonalityId {
   return KNOWN_IDS.has(id);
 }
 
+/** 手机导出：9:16 画布内放得下，优先前两段，再按字数截断 */
+function descriptionForPhone(full: string): string {
+  const paras = full.split(/\n\n/).filter(Boolean);
+  const head = paras.slice(0, 2).join("\n\n");
+  const max = 780;
+  if (head.length <= max) return head;
+  return `${head.slice(0, max).trimEnd()}…`;
+}
+
 export async function GET(
-  _request: Request,
+  request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id: raw } = await ctx.params;
@@ -23,7 +32,13 @@ export async function GET(
     return NextResponse.json({ error: "unknown personality" }, { status: 404 });
   }
 
+  const reqUrl = new URL(request.url);
+  const compact =
+    reqUrl.searchParams.get("compact") === "1" ||
+    reqUrl.searchParams.get("mobile") === "1";
+
   const copy = RESULT_DISPLAY_COPY[id];
+  const bodyText = compact ? descriptionForPhone(copy.description) : copy.description;
 
   // next/og（Satori）仅支持 TTF/OTF/WOFF，不支持 WOFF2（会抛 Unsupported OpenType signature wOF2）
   const font400Path = join(
@@ -46,6 +61,21 @@ export async function GET(
     ? `data:image/png;base64,${imageBuf.toString("base64")}`
     : null;
 
+  const W = compact ? 1080 : 720;
+  const H = compact ? 1920 : 2800;
+  const pad = compact ? 36 : 40;
+  const labelSize = compact ? 24 : 26;
+  const nameSize = compact ? 40 : 48;
+  const nameMb = compact ? 20 : 28;
+  const portraitW = compact ? 280 : 260;
+  const portraitH = compact ? 350 : 325;
+  const radius = compact ? 18 : 22;
+  const quoteMt = compact ? 22 : 32;
+  const quoteSize = compact ? 20 : 24;
+  const bodyMt = compact ? 20 : 28;
+  const bodySize = compact ? 16 : 19;
+  const bodyLh = compact ? 1.5 : 1.65;
+
   return new ImageResponse(
     (
       <div
@@ -56,15 +86,15 @@ export async function GET(
           flexDirection: "column",
           alignItems: "center",
           backgroundColor: "#0b0b0f",
-          padding: 40,
+          padding: pad,
           fontFamily: '"Noto Sans SC", sans-serif',
         }}
       >
         <div
           style={{
-            fontSize: 26,
+            fontSize: labelSize,
             color: "#a1a1aa",
-            marginBottom: 10,
+            marginBottom: 8,
             fontWeight: 400,
           }}
         >
@@ -72,12 +102,12 @@ export async function GET(
         </div>
         <div
           style={{
-            fontSize: 48,
+            fontSize: nameSize,
             fontWeight: 700,
             color: "#fafafa",
             textAlign: "center",
             lineHeight: 1.15,
-            marginBottom: 28,
+            marginBottom: nameMb,
           }}
         >
           {copy.name}
@@ -85,11 +115,11 @@ export async function GET(
         {portraitSrc ? (
           <img
             src={portraitSrc}
-            width={260}
-            height={325}
+            width={portraitW}
+            height={portraitH}
             alt=""
             style={{
-              borderRadius: 22,
+              borderRadius: radius,
               objectFit: "cover",
               objectPosition: "top",
             }}
@@ -97,42 +127,42 @@ export async function GET(
         ) : null}
         <div
           style={{
-            marginTop: 32,
+            marginTop: quoteMt,
             width: "100%",
-            paddingLeft: 14,
+            paddingLeft: 12,
             borderLeft: "4px solid rgba(251, 191, 36, 0.8)",
-            fontSize: 24,
+            fontSize: quoteSize,
             fontWeight: 400,
             color: "#f4f4f5",
-            lineHeight: 1.55,
+            lineHeight: 1.5,
           }}
         >
           {copy.quote}
         </div>
         <div
           style={{
-            marginTop: 28,
+            marginTop: bodyMt,
             width: "100%",
-            fontSize: 19,
+            fontSize: bodySize,
             fontWeight: 400,
             color: "#a1a1aa",
-            lineHeight: 1.65,
+            lineHeight: bodyLh,
             whiteSpace: "pre-wrap",
           }}
         >
-          {copy.description}
+          {bodyText}
         </div>
       </div>
     ),
     {
-      width: 720,
-      height: 2800,
+      width: W,
+      height: H,
       fonts: [
         { name: "Noto Sans SC", data: font400, style: "normal", weight: 400 },
         { name: "Noto Sans SC", data: font700, style: "normal", weight: 700 },
       ],
       headers: {
-        "Content-Disposition": `attachment; filename="FANTI-${id}.png"`,
+        "Content-Disposition": `inline; filename="FANTI-${id}.png"`,
       },
     },
   );

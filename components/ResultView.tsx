@@ -1,8 +1,7 @@
 "use client";
 
-import html2canvas from "html2canvas";
 import Image from "next/image";
-import { useCallback, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useState, type CSSProperties } from "react";
 import type { PersonalityId, ResultPersonality } from "@/data";
 import { PERSONALITIES, RESULT_DISPLAY_COPY } from "@/data";
 
@@ -11,7 +10,7 @@ export type ResultViewProps = {
   className?: string;
 };
 
-function downloadDataUrl(url: string, filename: string) {
+function downloadFromHref(url: string, filename: string) {
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
@@ -192,7 +191,6 @@ function ResultStyleCard({
 }
 
 export function ResultView({ resultPersonality, className = "" }: ResultViewProps) {
-  const cardRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [catalogOpen, setCatalogOpen] = useState(false);
@@ -203,27 +201,32 @@ export function ResultView({ resultPersonality, className = "" }: ResultViewProp
     setCatalogDetailId(null);
   }, []);
 
+  const dismissPreview = useCallback(() => {
+    setPreviewUrl((prev) => {
+      if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+      return null;
+    });
+  }, []);
+
   const handleExport = useCallback(async () => {
-    const el = cardRef.current;
-    if (!el) return;
     setExporting(true);
+    const filename = `FANTI-${resultPersonality.id}.png`;
     try {
-      const canvas = await html2canvas(el, {
-        scale: Math.min(2, typeof window !== "undefined" ? window.devicePixelRatio : 2),
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#0b0b0f",
-        logging: false,
-        scrollX: 0,
-        scrollY: 0,
-      });
-      const url = canvas.toDataURL("image/png");
-      const filename = `FANTI-${resultPersonality.id}.png`;
+      const res = await fetch(
+        `/api/report/${encodeURIComponent(resultPersonality.id)}`,
+      );
+      if (!res.ok) throw new Error(`report ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
 
       if (isLikelyMobile()) {
-        setPreviewUrl(url);
+        setPreviewUrl((prev) => {
+          if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+          return url;
+        });
       } else {
-        downloadDataUrl(url, filename);
+        downloadFromHref(url, filename);
+        URL.revokeObjectURL(url);
       }
     } catch (e) {
       console.error(e);
@@ -237,11 +240,11 @@ export function ResultView({ resultPersonality, className = "" }: ResultViewProp
     <div
       className={`mx-auto w-full max-w-md px-4 py-6 text-zinc-100 ${className}`}
     >
-      <div ref={cardRef}>
+      <div>
         <ResultStyleCard personality={resultPersonality} headingMode="result" />
       </div>
 
-      <div className="mt-5 flex gap-4" data-html2canvas-ignore>
+      <div className="mt-5 flex gap-4">
         <button
           type="button"
           onClick={handleExport}
@@ -272,7 +275,7 @@ export function ResultView({ resultPersonality, className = "" }: ResultViewProp
             </h2>
             <button
               type="button"
-              onClick={() => setPreviewUrl(null)}
+              onClick={dismissPreview}
               className="rounded-lg px-3 py-1 text-xs text-zinc-400 hover:bg-white/10 hover:text-zinc-100"
             >
               关闭
@@ -293,7 +296,9 @@ export function ResultView({ resultPersonality, className = "" }: ResultViewProp
           {!isLikelyMobile() ? (
             <button
               type="button"
-              onClick={() => downloadDataUrl(previewUrl, `FANTI-${resultPersonality.id}.png`)}
+              onClick={() =>
+                downloadFromHref(previewUrl, `FANTI-${resultPersonality.id}.png`)
+              }
               className="mt-4 rounded-lg border border-white/15 px-4 py-2 text-xs font-medium text-zinc-200 hover:bg-white/5"
             >
               再次下载 PNG

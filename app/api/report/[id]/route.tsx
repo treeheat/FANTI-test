@@ -25,13 +25,14 @@ export async function GET(
 
   const copy = RESULT_DISPLAY_COPY[id];
 
+  // next/og（Satori）仅支持 TTF/OTF/WOFF，不支持 WOFF2（会抛 Unsupported OpenType signature wOF2）
   const font400Path = join(
     process.cwd(),
-    "node_modules/@fontsource/noto-sans-sc/files/noto-sans-sc-chinese-simplified-400-normal.woff2",
+    "node_modules/@fontsource/noto-sans-sc/files/noto-sans-sc-chinese-simplified-400-normal.woff",
   );
   const font700Path = join(
     process.cwd(),
-    "node_modules/@fontsource/noto-sans-sc/files/noto-sans-sc-chinese-simplified-700-normal.woff2",
+    "node_modules/@fontsource/noto-sans-sc/files/noto-sans-sc-chinese-simplified-700-normal.woff",
   );
   const portraitPath = join(process.cwd(), "public", "images", `${id}.png`);
 
